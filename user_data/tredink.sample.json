@@ -1,0 +1,87 @@
+{
+    "$schema": "https://schema.freqtrade.io/schema.json",
+    "trading_mode": "spot",
+    "max_open_trades": 0,
+    "stake_currency": "USDT",
+    "stake_amount": 50,
+    "tradable_balance_ratio": 0.99,
+    "fiat_display_currency": "USD",
+    "dry_run": true,
+    "dry_run_wallet": 1000,
+    "timeframe": "15m",
+    "cancel_open_orders_on_exit": true,
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "ccxt_config": {},
+        "ccxt_async_config": {},
+        "pair_whitelist": [
+            "BTC/USDT",
+            "ETH/USDT",
+            "SOL/USDT",
+            "BNB/USDT"
+        ],
+        "pair_blacklist": []
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ],
+    "api_server": {
+        "enabled": true,
+        "listen_ip_address": "0.0.0.0",
+        "listen_port": 8080,
+        "verbosity": "error",
+        "enable_openapi": false,
+        "jwt_secret_key": "tredink-local-only-jwt-key-change-before-exposure-2026",
+        "CORS_origins": [
+            "http://127.0.0.1:8500"
+        ],
+        "username": "tredink",
+        "password": "TredinkLocalOnly_ChangeMe_2026",
+        "ws_token": "tredink-local-only-ws-token-change-before-exposure"
+    },
+    "freqai": {
+        "enabled": true,
+        "identifier": "tredink-lightgbm-15m-v1",
+        "purge_old_models": 2,
+        "train_period_days": 90,
+        "backtest_period_days": 7,
+        "save_backtest_models": false,
+        "live_retrain_hours": 0,
+        "feature_parameters": {
+            "include_timeframes": [
+                "15m",
+                "1h",
+                "4h"
+            ],
+            "include_corr_pairlist": [
+                "BTC/USDT",
+                "ETH/USDT"
+            ],
+            "label_period_candles": 12,
+            "include_shifted_candles": 2,
+            "DI_threshold": 1.0,
+            "weight_factor": 0.9,
+            "principal_component_analysis": false,
+            "use_SVM_to_remove_outliers": false,
+            "indicator_periods_candles": [
+                14,
+                28
+            ],
+            "plot_feature_importances": 0
+        },
+        "data_split_parameters": {
+            "test_size": 0.2,
+            "random_state": 42
+        },
+        "model_training_parameters": {}
+    },
+    "bot_name": "Tredink analysis",
+    "initial_state": "stopped",
+    "internals": {
+        "process_throttle_secs": 5
+    }
+}

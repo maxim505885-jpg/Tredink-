@@ -1,6 +1,23 @@
 # Tredink-
 
-This repository currently includes the upstream Freqtrade source code, including FreqAI. The original Freqtrade README follows.
+Tredink объединяет русскоязычную панель анализа рынка с Freqtrade и FreqAI. Выберите пару Binance Spot, обучите модель LightGBM на истории свечей и посмотрите ожидаемое изменение цены на горизонте трёх часов.
+
+## Start Tredink on Windows
+
+1. Установите и запустите Docker Desktop.
+2. В корне репозитория выполните `.\start-tredink.ps1` в PowerShell.
+3. Откройте [http://127.0.0.1:8500](http://127.0.0.1:8500).
+4. Введите локальные учётные данные API из `user_data/tredink.sample.json`, выберите пару и нажмите **Анализировать**.
+
+При первом анализе приложение загружает 120 дней свечей и обучает модель. Это может занять несколько минут. Прогноз показывает оценку доходности следующих 12 свечей по 15 минут. Это направление и расчётная цена, а не калиброванная вероятность.
+
+Compose запускает Freqtrade в режиме **webserver** и открывает оба сервиса только на localhost. Приложение использует публичные данные Binance Spot и не отправляет ордера. Чтобы остановить его, выполните `docker compose -f docker-compose.tredink.yml down`.
+
+Перед доступом к API из сети измените пароль, JWT secret, WebSocket token и разрешённый CORS origin в `user_data/tredink.sample.json`.
+
+## Included upstream project
+
+В репозитории есть исходный код Freqtrade и его система ML-прогнозирования FreqAI. Ниже сохранен upstream README.
 
 ---
 

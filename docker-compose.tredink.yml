@@ -1,0 +1,25 @@
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable_freqaitorch
+    container_name: tredink-analysis-engine
+    restart: unless-stopped
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./user_data/tredink.sample.json:/freqtrade/user_data/config_tredink.json:ro"
+    ports:
+      - "127.0.0.1:8080:8080"
+    command: >
+      webserver
+      --config /freqtrade/user_data/config_tredink.json
+      --userdir /freqtrade/user_data
+
+  dashboard:
+    image: nginx:alpine
+    container_name: tredink-dashboard
+    restart: unless-stopped
+    volumes:
+      - "./tredink:/usr/share/nginx/html:ro"
+    ports:
+      - "127.0.0.1:8500:80"
+    depends_on:
+      - freqtrade

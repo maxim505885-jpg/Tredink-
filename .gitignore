@@ -9,6 +9,10 @@ user_data/*
 !user_data/notebooks
 !user_data/models
 !user_data/freqaimodels
+!user_data/strategies/
+user_data/strategies/*
+!user_data/strategies/TredinkForecastStrategy.py
+!user_data/tredink.sample.json
 user_data/freqaimodels/*
 user_data/models/*
 user_data/notebooks/*
