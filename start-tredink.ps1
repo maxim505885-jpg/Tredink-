@@ -7,7 +7,12 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 
 Push-Location $PSScriptRoot
 try {
-    & docker compose -f $composeFile up -d
+    if (-not (Test-Path -LiteralPath ".env")) {
+        Copy-Item -LiteralPath ".env.example" -Destination ".env"
+        Write-Host "Создан локальный .env. Впишите Telegram token и chat ID в файл, чтобы включить сообщения."
+    }
+
+    & docker compose --env-file .env -f $composeFile up -d
     if ($LASTEXITCODE -ne 0) {
         throw "Tredink could not start. Check the Docker Desktop status and run: docker compose -f docker-compose.tredink.yml logs"
     }

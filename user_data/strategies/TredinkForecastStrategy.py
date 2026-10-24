@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from functools import reduce
+import math
 
 import talib.abstract as ta
 from pandas import DataFrame
 from technical import qtpylib
 
-from freqtrade.strategy import IStrategy
+from freqtrade.strategy import DecimalParameter, IStrategy, stoploss_from_absolute
 
 
 class TredinkForecastStrategy(IStrategy):
     """Predict a 12-candle forward return and expose it to FreqUI/API charts.
 
     This strategy is intended for analysis and dry-run use. It does not place
-    live orders by itself; the included app starts Freqtrade in webserver mode.
+    live orders; the included app starts Freqtrade with dry_run enabled.
     """
 
     INTERFACE_VERSION = 3
@@ -25,8 +25,12 @@ class TredinkForecastStrategy(IStrategy):
     process_only_new_candles = True
     can_short = False
     minimal_roi = {"0": 0.05, "120": 0.0}
-    stoploss = -0.05
+    stoploss = -0.03
+    use_custom_stoploss = True
     use_exit_signal = True
+    entry_threshold = DecimalParameter(
+        0.003, 0.02, decimals=3, default=0.005, space="buy", optimize=False
+    )
 
     plot_config = {
         "main_plot": {
@@ -105,6 +109,7 @@ class TredinkForecastStrategy(IStrategy):
         dataframe["ema_fast"] = ta.EMA(dataframe, timeperiod=20)
         dataframe["ema_slow"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["atr_pct"] = ta.ATR(dataframe, timeperiod=14) / dataframe["close"]
 
         dataframe = self.freqai.start(dataframe, metadata, self)
 
@@ -118,21 +123,54 @@ class TredinkForecastStrategy(IStrategy):
         dataframe["forecast_price"] = dataframe["close"] * (1 + dataframe["forecast_return"])
         dataframe["forecast_signal"] = 0
         valid = dataframe.get("do_predict", 0) == 1
-        dataframe.loc[valid & (dataframe["forecast_return"] >= 0.003), "forecast_signal"] = 1
-        dataframe.loc[valid & (dataframe["forecast_return"] <= -0.003), "forecast_signal"] = -1
+        dataframe.loc[
+            valid & (dataframe["forecast_return"] >= self.entry_threshold.value),
+            "forecast_signal",
+        ] = 1
+        dataframe.loc[
+            valid & (dataframe["forecast_return"] <= -self.entry_threshold.value),
+            "forecast_signal",
+        ] = -1
         return dataframe
 
+    def custom_stoploss(
+        self,
+        pair: str,
+        trade,
+        current_time,
+        current_rate: float,
+        current_profit: float,
+        after_fill: bool = False,
+        **kwargs,
+    ) -> float | None:
+        """Keep the paper/backtest stop aligned with the ATR risk shown in Tredink."""
+        dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        if dataframe.empty or current_rate <= 0:
+            return None
+
+        atr_fraction = float(dataframe.iloc[-1].get("atr_pct", 0.0) or 0.0)
+        if not math.isfinite(atr_fraction) or atr_fraction <= 0:
+            return None
+
+        stop_fraction = min(0.03, max(0.0075, atr_fraction * 2))
+        stop_price = current_rate * (1 - stop_fraction)
+        return stoploss_from_absolute(
+            stop_price,
+            current_rate=current_rate,
+            is_short=trade.is_short,
+            leverage=trade.leverage,
+        )
+
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        """Mark a long paper-trade signal when the forecast clears 0.3%."""
-        conditions = [
+        """Mark a long paper-trade signal when the forecast clears 0.5%."""
+        conditions = (
             dataframe["do_predict"] == 1,
-            dataframe["forecast_return"] >= 0.003,
+            dataframe["forecast_return"] >= self.entry_threshold.value,
             dataframe["volume"] > 0,
-        ]
-        dataframe.loc[reduce(lambda left, right: left & right, conditions), "enter_long"] = 1
-        dataframe.loc[
-            reduce(lambda left, right: left & right, conditions), "enter_tag"
-        ] = "tredink_forecast_up"
+        )
+        entry = conditions[0] & conditions[1] & conditions[2]
+        dataframe.loc[entry, "enter_long"] = 1
+        dataframe.loc[entry, "enter_tag"] = "tredink_forecast_up"
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:

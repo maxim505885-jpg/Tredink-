@@ -1,19 +1,23 @@
 # Tredink-
 
-Tredink объединяет русскоязычную панель анализа рынка с Freqtrade и FreqAI. Выберите пару Binance Spot, обучите модель LightGBM на истории свечей и посмотрите ожидаемое изменение цены на горизонте трёх часов.
+Tredink объединяет русскоязычную панель, Freqtrade/FreqAI и Telegram notifier. Модель оценивает движение Binance Spot на горизонте трёх часов. Приложение не отправляет ордера.
 
 ## Start Tredink on Windows
 
 1. Установите и запустите Docker Desktop.
-2. В корне репозитория выполните `.\start-tredink.ps1` в PowerShell.
-3. Откройте [http://127.0.0.1:8500](http://127.0.0.1:8500).
-4. Введите локальные учётные данные API из `user_data/tredink.sample.json`, выберите пару и нажмите **Анализировать**.
+2. Выполните .\\start-tredink.ps1 в PowerShell. При первом запуске создаётся локальный .env.
+3. Создайте Telegram-бота через https://t.me/BotFather, отправьте ему /start и внесите token и chat ID в .env.
+4. При желании задайте там пароль API и секреты. Не публикуйте этот файл.
+5. Откройте http://127.0.0.1:8500 и войдите с данными API из .env.
+6. Запустите powershell -ExecutionPolicy Bypass -File .\\scripts\\tredink-backtest.ps1, чтобы проверить четыре пары.
 
-При первом анализе приложение загружает 120 дней свечей и обучает модель. Это может занять несколько минут. Прогноз показывает оценку доходности следующих 12 свечей по 15 минут. Это направление и расчётная цена, а не калиброванная вероятность.
+Walk-forward проверка скачивает до 455 дней Binance истории и отдельно оценивает BTC, ETH, SOL и BNB на горизонте 3 часов. Она считает MAE/RMSE, точность направления, результаты после издержек, доходность, profit factor и просадку. Отчёт сохраняется в user_data/tredink-validation.json. Telegram блокирует сигналы, пока пара не пройдёт фильтры.
 
-Compose запускает Freqtrade в режиме **webserver** и открывает оба сервиса только на localhost. Приложение использует публичные данные Binance Spot и не отправляет ордера. Чтобы остановить его, выполните `docker compose -f docker-compose.tredink.yml down`.
+В Telegram приходит сценарий LONG, модельная оценка движения, расчётный вход, ATR-стоп и размер бумажной позиции. Размер рассчитывается от капитала из .env, риска, ATR и установленных лимитов. Это симуляция, не рекомендация и не ордер. Стратегия не открывает short.
 
-Перед доступом к API из сети измените пароль, JWT secret, WebSocket token и разрешённый CORS origin в `user_data/tredink.sample.json`.
+Сервисы доступны только через localhost; Telegram token хранится в .env. Для остановки выполните docker compose --env-file .env -f docker-compose.tredink.yml down.
+
+Для walk-forward результата нужны Docker Desktop, доступ к Binance для загрузки истории и Docker image Freqtrade/FreqAI. Первый прогон может занять время. Исторические метрики не доказывают будущую доходность.
 
 ## Included upstream project
 

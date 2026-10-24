@@ -1,11 +1,10 @@
-const API_BASE = "http://127.0.0.1:8080";
-const STRATEGY = "TredinkForecastStrategy";
-const MODEL = "LightGBMRegressor";
+const API_BASE = "";
 const HORIZON_CANDLES = 12;
 const TIMEFRAME_MS = 15 * 60 * 1000;
 
 let accessToken = "";
 let refreshToken = "";
+let notifierSettings = null;
 
 const byId = (id) => document.getElementById(id);
 const serviceStatus = byId("service-status");
@@ -23,6 +22,34 @@ async function checkService() {
     setServiceStatus("online", "Движок доступен");
   } catch {
     setServiceStatus("offline", "Движок не запущен");
+  }
+}
+
+async function checkNotifier() {
+  try {
+    const response = await fetch(`${API_BASE}/notifier/health`, { signal: AbortSignal.timeout(5000), cache: "no-store" });
+    if (!response.ok) throw new Error("Notifier недоступен");
+    notifierSettings = await response.json();
+    const status = byId("telegram-status");
+    const configured = notifierSettings.telegram_configured;
+    status.textContent = configured ? "Telegram подключён" : "Нужна настройка";
+    status.className = `telegram-status ${configured ? "connected" : "disconnected"}`;
+    byId("test-telegram").disabled = !configured;
+    const eligible = notifierSettings.validation_eligible_pairs || [];
+    const validationText = !notifierSettings.validation_available
+      ? "бэктест ещё не выполнен; сигналы заблокированы"
+      : eligible.length
+        ? `проверку прошли: ${eligible.join(", ")}`
+        : "ни одна пара не прошла фильтры; сигналы заблокированы";
+    const detail = configured
+      ? `${validationText} · риск ${notifierSettings.risk_per_trade_pct}%`
+      : "Добавьте token и chat ID в .env, затем перезапустите приложение";
+    byId("telegram-detail").textContent = detail;
+  } catch {
+    notifierSettings = null;
+    byId("telegram-status").textContent = "Сервис не запущен";
+    byId("telegram-status").className = "telegram-status disconnected";
+    byId("telegram-detail").textContent = "Запустите приложение и проверьте Docker Compose";
   }
 }
 
@@ -68,10 +95,6 @@ async function refreshAccessToken() {
   accessToken = body.access_token;
 }
 
-function formatDateForTimerange(date) {
-  return date.toISOString().slice(0, 10).replaceAll("-", "");
-}
-
 function encodeBasicCredentials(username, password) {
   const bytes = new TextEncoder().encode(`${username}:${password}`);
   let binary = "";
@@ -80,9 +103,7 @@ function encodeBasicCredentials(username, password) {
 }
 
 async function requestHistory(pair, mayRefresh = true) {
-  const now = new Date();
-  const start = new Date(now.getTime() - 120 * 24 * 60 * 60 * 1000);
-  const response = await fetch(`${API_BASE}/api/v1/pair_history`, {
+  const response = await fetch(`${API_BASE}/api/v1/pair_candles`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -91,12 +112,9 @@ async function requestHistory(pair, mayRefresh = true) {
     body: JSON.stringify({
       pair,
       timeframe: "15m",
-      timerange: `${formatDateForTimerange(start)}-${formatDateForTimerange(now)}`,
-      strategy: STRATEGY,
-      freqaimodel: MODEL,
-      live_mode: true,
+      limit: 1500,
       columns: [
-        "date", "close", "volume", "ema_fast", "ema_slow", "rsi",
+      "date", "close", "volume", "ema_fast", "ema_slow", "rsi", "atr_pct",
         "forecast_return", "forecast_return_pct", "forecast_price", "do_predict",
       ],
     }),
@@ -122,7 +140,7 @@ function fieldIndex(columns, name) {
 function rowsFromResponse(result) {
   const columns = result.columns || [];
   const indexes = Object.fromEntries(
-    ["date", "close", "volume", "ema_fast", "ema_slow", "rsi", "forecast_return", "forecast_return_pct", "forecast_price", "do_predict"]
+    ["date", "close", "volume", "ema_fast", "ema_slow", "rsi", "atr_pct", "forecast_return", "forecast_return_pct", "forecast_price", "do_predict"]
       .map((field) => [field, fieldIndex(columns, field)]),
   );
   return (result.data || []).map((row) => ({
@@ -132,6 +150,7 @@ function rowsFromResponse(result) {
     emaFast: Number(row[indexes.ema_fast]),
     emaSlow: Number(row[indexes.ema_slow]),
     rsi: Number(row[indexes.rsi]),
+    atrPct: Number(row[indexes.atr_pct]),
     expectedReturn: Number(row[indexes.forecast_return]),
     expectedReturnPct: Number(row[indexes.forecast_return_pct]),
     expectedPrice: Number(row[indexes.forecast_price]),
@@ -183,9 +202,17 @@ function renderResult(pair, result) {
   const rows = rowsFromResponse(result);
   if (!rows.length) throw new Error("Биржа не вернула свечи для этой пары.");
   const latest = rows.at(-1);
-  const forecastValid = latest.doPredict === 1 && Number.isFinite(latest.expectedReturn);
+  const candleCloseMs = new Date(latest.date).getTime() + TIMEFRAME_MS;
+  const candleAgeMs = Date.now() - candleCloseMs;
+  const forecastValid = latest.doPredict === 1
+    && Number.isFinite(latest.expectedReturn)
+    && candleAgeMs >= 0
+    && candleAgeMs <= TIMEFRAME_MS * 2 + 5 * 60 * 1000;
+  const validationPassed = notifierSettings?.validation_eligible_pairs?.includes(pair) === true;
   const horizonHours = (HORIZON_CANDLES * TIMEFRAME_MS) / 3_600_000;
-  const direction = !forecastValid || Math.abs(latest.expectedReturn) < 0.003
+  const direction = !forecastValid || !validationPassed
+    ? { text: validationPassed ? "Нет свежего сигнала" : "Проверка не пройдена", tone: "neutral" }
+    : Math.abs(latest.expectedReturn) < 0.005
     ? { text: "Боковой сценарий", tone: "neutral" }
     : latest.expectedReturn > 0
       ? { text: "Возможен рост", tone: "up" }
@@ -201,14 +228,32 @@ function renderResult(pair, result) {
   byId("return-value").className = `metric-value ${forecastValid ? (latest.expectedReturnPct >= 0 ? "positive" : "negative") : ""}`;
   byId("price-value").textContent = forecastValid ? currency(latest.expectedPrice) : "—";
   byId("current-price").textContent = `Текущая цена: ${currency(latest.close)}`;
-  byId("quality-value").textContent = forecastValid ? "Принят" : "Фильтр модели";
+  byId("quality-value").textContent = forecastValid ? (validationPassed ? "Проверен" : "Не проверен") : "Фильтр модели";
   byId("quality-value").className = `quality-value ${forecastValid ? "" : "low"}`;
-  byId("quality-detail").textContent = forecastValid ? "Проверка выбросов пройдена" : "do_predict не подтвердил свечу";
+  byId("quality-detail").textContent = forecastValid
+    ? (validationPassed ? "walk-forward тест прошёл фильтры" : "do_predict=1 · нет положительного бэктеста")
+    : "Модель отклонила или устарела свеча";
   byId("rsi-value").textContent = Number.isFinite(latest.rsi) ? latest.rsi.toFixed(1) : "—";
   byId("trend-value").textContent = Number.isFinite(latest.emaFast) && Number.isFinite(latest.emaSlow)
     ? (latest.emaFast >= latest.emaSlow ? "EMA 20 выше EMA 50" : "EMA 20 ниже EMA 50")
     : "Недостаточно данных";
   byId("candle-count").textContent = new Intl.NumberFormat("ru-RU").format(rows.length);
+  const canEstimate = forecastValid && validationPassed && latest.expectedReturn >= 0.005 && latest.atrPct > 0;
+  if (canEstimate && notifierSettings) {
+    const stopFraction = Math.min(0.03, Math.max(0.0075, latest.atrPct * 2));
+    const equity = Number(notifierSettings.equity_usdt);
+    const riskFraction = Number(notifierSettings.risk_per_trade_pct) / 100;
+    const capFraction = Number(notifierSettings.max_position_pct) / 100;
+    const maxPosition = Number(notifierSettings.max_position_usdt);
+    const position = Math.min(equity * riskFraction / stopFraction, equity * capFraction, maxPosition);
+    byId("position-size").textContent = `${position.toFixed(2)} USDT (paper)`;
+    byId("stop-price").textContent = currency(latest.close * (1 - stopFraction));
+    byId("risk-amount").textContent = `до ${(position * stopFraction).toFixed(2)} USDT`;
+  } else {
+    byId("position-size").textContent = "Нет расчёта";
+    byId("stop-price").textContent = "—";
+    byId("risk-amount").textContent = "—";
+  }
   if (forecastValid) drawChart(rows, latest);
   else drawChart(rows, { expectedPrice: latest.close });
 }
@@ -232,7 +277,7 @@ byId("analysis-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   hideError();
   byId("results").classList.add("hidden");
-  setBusy(true, "Анализируем 120 дней истории", "FreqAI обучает модель и рассчитывает сценарий на 12 свечей вперёд.");
+  setBusy(true, "Загружаем расчёт модели", "Получаем свежие свечи и прогноз работающей dry-run модели.");
   try {
     if (!accessToken) throw new Error("Сначала подключитесь к локальному движку.");
     const pair = byId("pair").value;
@@ -259,5 +304,26 @@ byId("logout-button").addEventListener("click", () => {
   byId("results").classList.add("hidden");
 });
 
+byId("test-telegram").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const message = byId("telegram-message");
+  button.disabled = true;
+  message.textContent = "Отправляем тестовое сообщение…";
+  message.className = "telegram-message";
+  try {
+    const response = await fetch(`${API_BASE}/notifier/test`, { method: "POST", signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error("Не удалось отправить. Проверьте token, chat ID и доступ к Telegram.");
+    message.textContent = "Тестовое сообщение отправлено. Проверьте чат с ботом.";
+    message.classList.add("success");
+  } catch (error) {
+    message.textContent = error.message || "Сервис Telegram недоступен.";
+    message.classList.add("failure");
+  } finally {
+    button.disabled = !notifierSettings?.telegram_configured;
+  }
+});
+
 checkService();
+checkNotifier();
 window.setInterval(checkService, 15_000);
+window.setInterval(checkNotifier, 30_000);

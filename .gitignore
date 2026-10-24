@@ -112,6 +112,8 @@ target/
 .python-version
 
 .env
+.env.*
+!.env.example
 .venv
 .idea
 .vscode

@@ -55,14 +55,35 @@
             </label>
             <label class="field">
               <span>История для обучения</span>
-              <div class="static-value">120 дней</div>
+              <div class="static-value">90 дней</div>
             </label>
             <button id="analyze-button" class="primary-button" type="submit">
               <span class="button-icon" aria-hidden="true">↗</span>
               <span>Анализировать</span>
             </button>
           </form>
-          <p class="form-note">Первый анализ обучает модель на исторических данных. Это может занять несколько минут.</p>
+          <p class="form-note">Первое обучение может занять несколько минут. До проверки на истории используйте результат только как сценарий.</p>
+        </section>
+
+        <section id="telegram-panel" class="panel telegram-panel" aria-labelledby="telegram-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">УВЕДОМЛЕНИЯ</p>
+              <h2 id="telegram-title">Telegram сигналы</h2>
+            </div>
+            <span id="telegram-status" class="telegram-status">Проверяем подключение</span>
+          </div>
+          <div class="telegram-layout">
+            <div class="telegram-steps">
+              <p>Создайте бота через <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>, нажмите Start в чате с ботом и внесите token и chat ID в локальный файл <code>.env</code>.</p>
+              <p class="telegram-security">Token хранится только на этом компьютере. Панель не отправляет его в браузер.</p>
+            </div>
+            <div class="telegram-actions">
+              <button id="test-telegram" class="secondary-button" type="button" disabled>Отправить тест</button>
+              <span id="telegram-detail" class="telegram-detail">Ожидание настройки .env</span>
+            </div>
+          </div>
+          <p id="telegram-message" class="telegram-message" role="status"></p>
         </section>
 
         <section id="login-panel" class="panel login-panel">
@@ -73,7 +94,7 @@
             </div>
             <span class="lock-icon" aria-hidden="true">⌑</span>
           </div>
-          <p class="login-copy">Введите данные локального API из файла <code>user_data/tredink.sample.json</code>.</p>
+          <p class="login-copy">Введите имя и пароль API из локального файла <code>.env</code>. Начальный пароль указан в файле, если настройки ещё не менялись.</p>
           <form id="login-form" class="login-form">
             <label class="field">
               <span>Имя пользователя</span>
@@ -81,7 +102,7 @@
             </label>
             <label class="field">
               <span>Пароль API</span>
-              <input id="password" type="password" autocomplete="current-password" value="TredinkLocalOnly_ChangeMe_2026" required />
+              <input id="password" type="password" autocomplete="current-password" value="replace-with-a-long-local-password" required />
             </label>
             <button class="secondary-button" type="submit">Подключиться</button>
           </form>
@@ -129,7 +150,7 @@
             <article class="metric-card">
               <span class="metric-label">Проверка данных</span>
               <strong id="quality-value" class="quality-value">—</strong>
-              <span id="quality-detail" class="metric-detail">do_predict</span>
+              <span id="quality-detail" class="metric-detail">Флаг допуска FreqAI</span>
             </article>
           </div>
 
@@ -153,13 +174,21 @@
               <div class="detail-row"><span>EMA 20 / EMA 50</span><strong id="trend-value">—</strong></div>
               <div class="detail-row"><span>Свечей в анализе</span><strong id="candle-count">—</strong></div>
             </article>
-            <article class="notice-card">
+            <article class="panel size-card">
+              <p class="eyebrow">РАСЧЁТ РИСКА · PAPER</p>
+              <h2>Размер позиции</h2>
+              <strong id="position-size" class="position-size">—</strong>
+              <div class="detail-row"><span>Стоп по ATR</span><strong id="stop-price">—</strong></div>
+              <div class="detail-row"><span>Риск до стопа</span><strong id="risk-amount">—</strong></div>
+              <p class="size-caption">Размер ограничен настройками локального notifier. Это симуляция, ордер не отправляется.</p>
+            </article>
+          </div>
+          <div class="notice-card result-notice">
               <span class="notice-icon" aria-hidden="true">i</span>
               <div>
-                <strong>Прогноз — это оценка, не гарантия.</strong>
-                <p>Модель обучается на прошлых свечах и может ошибаться при резкой смене рынка. Tredink работает в режиме анализа: реальные сделки не отправляются.</p>
+                <strong>Модель ещё не доказала качество на будущих данных.</strong>
+                <p>Проверьте доходность после комиссий, просадку и точность прогноза на каждом активе. Telegram шлёт только paper сигнал на рост; автоматической торговли нет.</p>
               </div>
-            </article>
           </div>
         </section>
       </main>
