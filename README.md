@@ -1,3 +1,9 @@
+# Tredink-
+
+This repository currently includes the upstream Freqtrade source code, including FreqAI. The original Freqtrade README follows.
+
+---
+
 # ![freqtrade](https://raw.githubusercontent.com/freqtrade/freqtrade/develop/docs/assets/freqtrade_poweredby.svg)
 
 [![Freqtrade CI](https://github.com/freqtrade/freqtrade/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/freqtrade/freqtrade/actions/workflows/ci.yml)
